@@ -1,184 +1,232 @@
 #include <iostream>
 #include <vector>
-#include <cstdlib>
+#include <conio.h>
+#include <windows.h>
 #include <ctime>
 #include <chrono>
 #include <thread>
-#include <conio.h>
-#include <windows.h>
-using namespace std; 
-const int BOARD_WIDTH = 10;
-const int BOARD_HEIGHT = 20;
-enum class TetrominoType { I, J, L, O, S, T, Z };
-struct Tetromino {
-    TetrominoType type;
+
+using namespace std;
+
+const int WIDTH = 10;
+const int HEIGHT = 20;
+const int COLORS[7] = {9, 14, 13, 12, 10, 6, 11}; // Blue, Yellow, Pink, Red, Green, Orange, Cyan
+
+class Tetromino {
+public:
     int x, y;
-    std::vector<std::vector<bool>> shape;
+    int type;
+    vector<vector<int>> shape;
+
+    Tetromino() {
+        x = WIDTH / 2 - 2;
+        y = 0;
+        type = rand() % 7;
+        initialize();
+    }
+
+    void initialize() {
+        switch (type) {
+            case 0: shape = {{1, 1, 1, 1}}; break;           // I
+            case 1: shape = {{1, 1}, {1, 1}}; break;         // O
+            case 2: shape = {{0, 1, 0}, {1, 1, 1}}; break;   // T
+            case 3: shape = {{1, 1, 0}, {0, 1, 1}}; break;   // Z
+            case 4: shape = {{0, 1, 1}, {1, 1, 0}}; break;   // S
+            case 5: shape = {{1, 0, 0}, {1, 1, 1}}; break;   // J
+            case 6: shape = {{0, 0, 1}, {1, 1, 1}}; break;   // L
+        }
+    }
+
+    void reset() {
+        x = WIDTH / 2 - 2;  //coloumn
+        y = 0;              //row
+        type = rand() % 7;
+        initialize();
+    }
 };
-std::vector<std::vector<bool>> board(BOARD_HEIGHT, std::vector<bool>(BOARD_WIDTH, false));
-Tetromino currentPiece;
-int score = 0;
-void initializeTetromino(Tetromino& tetromino) {
-    tetromino.x = BOARD_WIDTH / 2 - 2;
-    tetromino.y = 0;
-    switch (tetromino.type) {
-        case TetrominoType::I:
-            tetromino.shape = {{true, true, true, true}};
-            break;
-        case TetrominoType::J:
-            tetromino.shape = {{true, false, false}, {true, true, true}};
-            break;
-        case TetrominoType::L:
-            tetromino.shape = {{false, false, true}, {true, true, true}};
-            break;
-        case TetrominoType::O:
-            tetromino.shape = {{true, true}, {true, true}};
-            break;
-        case TetrominoType::S:
-            tetromino.shape = {{false, true, true}, {true, true, false}};
-            break;
-        case TetrominoType::T:
-            tetromino.shape = {{false, true, false}, {true, true, true}};
-            break;
-        case TetrominoType::Z:
-            tetromino.shape = {{true, true, false}, {false, true, true}};
-            break;
+
+class Tetris {
+private:
+    vector<vector<int>> board;
+    Tetromino current;
+    int score;
+    HANDLE hConsole;
+
+public:
+    Tetris() {
+        board = vector<vector<int>>(HEIGHT, vector<int>(WIDTH, 0));
+        score = 0;
+        hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     }
-}
-TetrominoType getRandomTetrominoType() {
-    return static_cast<TetrominoType>(rand() % 7);
-}
-void spawnNewPiece() {
-    currentPiece.type = getRandomTetrominoType();
-    initializeTetromino(currentPiece);
-}
-bool isCollision() {
-    for (size_t y = 0; y < currentPiece.shape.size(); ++y) {
-        for (size_t x = 0; x < currentPiece.shape[y].size(); ++x) {
-            if (currentPiece.shape[y][x]) {
-                int boardX = currentPiece.x + x;
-                int boardY = currentPiece.y + y;
-                if (boardX < 0 || boardX >= BOARD_WIDTH || boardY >= BOARD_HEIGHT || 
-                    (boardY >= 0 && board[boardY][boardX])) {
-                    return true;
-                }
-            }
-        }
+
+    void gotoxy(int x, int y) {
+        COORD coord = {(SHORT)x, (SHORT)y};
+        SetConsoleCursorPosition(hConsole, coord);
     }
-    return false;
-}
-void mergePieceToBoard() {
-    for (size_t y = 0; y < currentPiece.shape.size(); ++y) {
-        for (size_t x = 0; x < currentPiece.shape[y].size(); ++x) {
-            if (currentPiece.shape[y][x]) {
-                board[currentPiece.y + y][currentPiece.x + x] = true;
-            }
-        }
-    }
-}
-void clearLines() {
-    int linesCleared = 0;
-    for (int y = BOARD_HEIGHT - 1; y >= 0; --y) {
-        bool lineFull = true;
-        for (int x = 0; x < BOARD_WIDTH; ++x) {
-            if (!board[y][x]) {
-                lineFull = false;
-                break;
-            }
-        }
-        if (lineFull) {
-            ++linesCleared;
-            for (int yy = y; yy > 0; --yy) {
-                board[yy] = board[yy - 1];  
-            }
-            board[0] = std::vector<bool>(BOARD_WIDTH, false);  
-            ++y; 
-        }
-    }
-    score += linesCleared * 100;
-}
-void rotatePiece() {
-    std::vector<std::vector<bool>> rotated(currentPiece.shape[0].size(), 
-    std::vector<bool>(currentPiece.shape.size()));
-    for (size_t y = 0; y < currentPiece.shape.size(); ++y) {
-        for (size_t x = 0; x < currentPiece.shape[y].size(); ++x) {
-            rotated[x][currentPiece.shape.size() - 1 - y] = currentPiece.shape[y][x];
-        }
-    }
-    auto originalShape = currentPiece.shape;
-    currentPiece.shape = rotated;
-    if (isCollision()) {
-        currentPiece.shape = originalShape;
-    }
-}
-void drawBoard() {
-    system("cls");
-    std::cout << "Score: " << score << "\n";
-    for (int y = 0; y < BOARD_HEIGHT; ++y) {
-        for (int x = 0; x < BOARD_WIDTH; ++x) {
-            bool isCurrent = false;
-            for (size_t pieceY = 0; pieceY < currentPiece.shape.size(); ++pieceY) {
-                for (size_t pieceX = 0; pieceX < currentPiece.shape[pieceY].size(); ++pieceX) {
-                    if (currentPiece.shape[pieceY][pieceX] && 
-                        x == currentPiece.x + pieceX && 
-                        y == currentPiece.y + pieceY) {
-                        isCurrent = true;
+
+    bool isCollision() {
+        for (int i = 0; i < current.shape.size(); i++) {
+            for (int j = 0; j < current.shape[i].size(); j++) {
+                if (current.shape[i][j]) {
+                    int newX = current.x + j;
+                    int newY = current.y + i;
+                    if (newX < 0 || newX >= WIDTH || newY >= HEIGHT || (newY >= 0 && board[newY][newX])) {
+                        return true;
                     }
                 }
             }
-            std::cout << (isCurrent ? "[]" : (board[y][x] ? "##" : "  "));
         }
-        std::cout << "\n";
+        return false;
     }
-    std::cout << std::string(BOARD_WIDTH * 2, '-') << "\n";
-}
-void gameLoop() {
-    auto lastFallTime = std::chrono::steady_clock::now();
-    while (true) {
-        drawBoard();
-        if (_kbhit()) {
-            char key = _getch();
-            switch (key) {
-                case 'a': --currentPiece.x; if (isCollision()) ++currentPiece.x; break;
-                case 'd': ++currentPiece.x; if (isCollision()) --currentPiece.x; break;
-                case 's':
-                    ++currentPiece.y;
-                    if (isCollision()) {
-                        --currentPiece.y;
-                        mergePieceToBoard();
-                        clearLines();
-                        spawnNewPiece();
-                        if (isCollision()) {
-                            cout << "Game Over! Final Score: " << score << "\n";
-                            return;
+
+    void mergePiece() {
+        for (int i = 0; i < current.shape.size(); i++) {
+            for (int j = 0; j < current.shape[i].size(); j++) {
+                if (current.shape[i][j] && current.y + i >= 0) {
+                    board[current.y + i][current.x + j] = current.type + 1;
+                }
+            }
+        }
+    }
+
+    void clearLines() {
+        int lines = 0;
+        for (int i = HEIGHT - 1; i >= 0; i--) {
+            bool full = true;
+            for (int j = 0; j < WIDTH; j++) {
+                if (!board[i][j]) {
+                    full = false;
+                    break;
+                }
+            }
+            if (full) {
+                board.erase(board.begin() + i);
+                board.insert(board.begin(), vector<int>(WIDTH, 0));
+                lines++;
+                i++;
+            }
+        }
+        score += lines * 100;
+    }
+
+    void rotatePiece() {
+        vector<vector<int>> rotated(current.shape[0].size(), vector<int>(current.shape.size()));
+        for (int i = 0; i < current.shape.size(); i++) {
+            for (int j = 0; j < current.shape[i].size(); j++) {
+                rotated[j][current.shape.size() - 1 - i] = current.shape[i][j];
+            }
+        }
+        auto original = current.shape;
+        current.shape = rotated;
+        if (isCollision()) {
+            current.shape = original;
+        }
+    }
+
+    void draw() {
+        gotoxy(0, 0);
+        SetConsoleTextAttribute(hConsole, 7);
+        //cout << "Score: " << score << "\n";
+        cout << "+" << string(WIDTH * 2, '-') << "+"<<endl;
+
+        for (int i = 0; i < HEIGHT; i++) {
+            cout << "|";
+            for (int j = 0; j < WIDTH; j++) {
+                bool isCurrent = false;
+                int color = 7;
+
+                for (int pi = 0; pi < current.shape.size(); pi++) {
+                    for (int pj = 0; pj < current.shape[pi].size(); pj++) {
+                        if (current.shape[pi][pj] && i == current.y + pi && j == current.x + pj) {
+                            isCurrent = true;
+                            color = COLORS[current.type];
                         }
                     }
-                    break;
-                case 'w': rotatePiece(); break;
-                case 'q': std::cout << "Game Over! Final Score: " << score << "\n"; return;
-            }
-        }
-        auto currentTime = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastFallTime).count() > 500) {
-            ++currentPiece.y;
-            if (isCollision()) {
-                --currentPiece.y;
-                mergePieceToBoard();
-                clearLines();
-                spawnNewPiece();
-                if (isCollision()) {
-                    std::cout << "Game Over! Final Score: " << score << "\n";   
-                    return;
+                }
+
+                if (isCurrent) {
+                    SetConsoleTextAttribute(hConsole, color);
+                    cout << "[]";
+                } 
+                else if (board[i][j]) {
+                    SetConsoleTextAttribute(hConsole, COLORS[board[i][j] - 1]);
+                    cout << "##";
+                } 
+                else {
+                    SetConsoleTextAttribute(hConsole, 7);
+                    cout << "  ";
                 }
             }
-            lastFallTime = currentTime;
+            SetConsoleTextAttribute(hConsole, 7);
+            cout << "|"<<endl;
         }
-        Sleep(200);
+        cout << "+" << string(WIDTH * 2, '-') << "+"<<endl;
+        cout << "Score: " << score << endl;
     }
-}
+
+    void play() {
+        auto lastFall = chrono::steady_clock::now();
+        while (true) {
+            draw();
+
+            if (_kbhit()) {
+                char key = _getch();
+                if (key == 'a') {
+                    current.x--;
+                    if (isCollision()) current.x++;
+                } 
+                else if (key == 'd') {
+                    current.x++;
+                    if (isCollision()) current.x--;
+                } 
+                else if (key == 's') {
+                    current.y++;
+                    if (isCollision()) {
+                        current.y--;
+                        mergePiece();
+                        clearLines();
+                        current.reset();
+                        if (isCollision()) {
+                            gotoxy(0, HEIGHT + 3);
+                            cout << "GAME OVER! Final Score: " << score << "\n";
+                            break;
+                        }
+                    }
+                } 
+                else if (key == 'w') {
+                    rotatePiece();
+                } 
+                else if (key == 'q') {
+                    gotoxy(0, HEIGHT + 3);
+                    cout << "GAME OVER! Final Score: " << score << "\n";
+                    break;
+                }
+            }
+
+            auto now = chrono::steady_clock::now();
+            if (chrono::duration_cast<chrono::milliseconds>(now - lastFall).count() > 500) {
+                current.y++;
+                if (isCollision()) {
+                    current.y--;
+                    mergePiece();
+                    clearLines();
+                    current.reset();
+                    if (isCollision()) {
+                        gotoxy(0, HEIGHT + 3);
+                        cout << "GAME OVER! Final Score: " << score << "\n";
+                        break;
+                    }
+                }
+                lastFall = now;
+            }
+            Sleep(50);
+        }
+    }
+};
+
 int main() {
-    srand(static_cast<unsigned>(time(nullptr)));
-    spawnNewPiece();
-    gameLoop();
+    srand((unsigned)time(0));
+    Tetris game;
+    game.play();
     return 0;
 }
